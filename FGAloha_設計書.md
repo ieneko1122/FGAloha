@@ -577,14 +577,14 @@ erDiagram
 
 **管理者向け**
 
-| 画面名 | URL | フェーズ |
-|--------|-----|---------|
-| 商品一覧 | GET /admin/products | 1 |
-| 商品登録 | GET /admin/products/new | 1 |
-| 商品編集 | GET /admin/products/{id}/edit | 1 |
-| 商品削除確認 | GET /admin/products/{id}/delete | 1 |
-| 注文一覧 | GET /admin/orders | 1 |
-| 注文詳細・ステータス更新 | GET /admin/orders/{id} | 1 |
+| 画面名          | URL                             | フェーズ |
+| ------------ | ------------------------------- | ---- |
+| 商品一覧         | GET /admin/products             | 1    |
+| 商品登録         | GET /admin/products/new         | 1    |
+| 商品編集         | GET /admin/products/{id}/edit   | 1    |
+| 商品削除確認       | GET /admin/products/{id}/delete | 1    |
+| 注文一覧         | GET /admin/orders               | 1    |
+| 注文詳細・ステータス更新 | GET /admin/orders/{id}          | 1    |
 
 ### クラス図
 
@@ -709,6 +709,320 @@ classDiagram
     Order --> OrderStatus
     Order "1" --> "many" OrderItem
     OrderItem --> ProductVariant
+```
+
+#### Service・Repository・Controller層
+
+```mermaid
+classDiagram
+    class ProductController {
+        -ProductService productService
+        -CategoryRepository categoryRepository
+        -ColorRepository colorRepository
+        -SizeRepository sizeRepository
+        +index(ProductSearchForm, Model) String
+        +detail(Long, Model) String
+    }
+    class CartController {
+        -CartService cartService
+        +cart(Model) String
+        +add(CartForm) String
+        +update(Long, CartForm) String
+        +delete(Long) String
+    }
+    class OrderController {
+        -OrderService orderService
+        -ShippingMethodRepository shippingMethodRepository
+        -PaymentMethodRepository paymentMethodRepository
+        +address(Model) String
+        +saveAddress(AddressForm) String
+        +confirm(Model) String
+        +order(OrderForm) String
+        +complete(Model) String
+    }
+    class UserController {
+        -UserService userService
+        +registerForm(Model) String
+        +register(UserForm, BindingResult) String
+        +passwordChangeForm(Model) String
+        +passwordChange(PasswordForm, BindingResult) String
+        +passwordResetForm(Model) String
+        +passwordReset(String) String
+    }
+    class AdminProductController {
+        -ProductService productService
+        -CategoryRepository categoryRepository
+        -ColorRepository colorRepository
+        -SizeRepository sizeRepository
+        +index(Model) String
+        +newForm(Model) String
+        +create(ProductForm, BindingResult) String
+        +editForm(Long, Model) String
+        +update(Long, ProductForm, BindingResult) String
+        +delete(Long) String
+    }
+    class AdminOrderController {
+        -OrderService orderService
+        +index(Model) String
+        +detail(Long, Model) String
+        +updateStatus(Long, OrderStatus) String
+    }
+
+    class ProductService {
+        -ProductRepository productRepository
+        +findAll(ProductSearchForm) List~Product~
+        +findById(Long) Product
+        +save(Product) void
+        +delete(Long) void
+    }
+    class CartService {
+        -CartItemRepository cartItemRepository
+        -ProductVariantRepository variantRepository
+        +findByUser(User) List~CartItem~
+        +add(User, Long, int) void
+        +update(Long, int) void
+        +delete(Long) void
+        +calcTotal(List~CartItem~) int
+        +clear(User) void
+    }
+    class OrderService {
+        -OrderRepository orderRepository
+        -CartService cartService
+        -PaymentStrategy paymentStrategy
+        +order(User, OrderForm) Order
+        +findByUser(User) List~Order~
+        +updateStatus(Long, OrderStatus) void
+    }
+    class UserService {
+        -UserRepository userRepository
+        +register(UserForm) void
+        +changePassword(User, String) void
+        +sendResetMail(String) void
+        +resetPassword(String, String) void
+    }
+
+    class ProductRepository {
+        <<interface>>
+        +findByNameContaining(String) List~Product~
+        +findByCategoriesId(Long) List~Product~
+    }
+    class CartItemRepository {
+        <<interface>>
+        +findByUser(User) List~CartItem~
+        +deleteByUser(User) void
+    }
+    class OrderRepository {
+        <<interface>>
+        +findByUserOrderByOrderedAtDesc(User) List~Order~
+    }
+    class UserRepository {
+        <<interface>>
+        +findByEmail(String) Optional~User~
+    }
+
+    class PaymentStrategy {
+        <<interface>>
+        +pay(int amount) void
+    }
+    class MockPaymentStrategy {
+        +pay(int amount) void
+    }
+
+    ProductController --> ProductService
+    CartController --> CartService
+    OrderController --> OrderService
+    UserController --> UserService
+    AdminProductController --> ProductService
+    AdminOrderController --> OrderService
+    ProductService --> ProductRepository
+    CartService --> CartItemRepository
+    OrderService --> OrderRepository
+    OrderService --> CartService
+    OrderService --> PaymentStrategy
+    UserService --> UserRepository
+    MockPaymentStrategy ..|> PaymentStrategy
+```
+
+---
+
+### シーケンス図
+
+#### 商品一覧・絞り込み
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Controller as ProductController
+    participant Service as ProductService
+    participant Repository as ProductRepository
+    participant DB as Oracle DB
+
+    User->>Controller: GET /products?category=1&color=2
+    Controller->>Service: findAll(ProductSearchForm)
+    Service->>Repository: findByCategoriesIdAndVariantsColorId(1, 2)
+    Repository->>DB: SELECT DISTINCT p.* FROM products p ...
+    DB-->>Repository: List~Product~
+    Repository-->>Service: List~Product~
+    Service-->>Controller: List~Product~
+    Controller->>Controller: model.addAttribute("products", ...)
+    Controller-->>User: products/index.html
+```
+
+#### カート追加
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Controller as CartController
+    participant Service as CartService
+    participant VRepo as ProductVariantRepository
+    participant CRepo as CartItemRepository
+    participant DB as Oracle DB
+
+    User->>Controller: POST /cart/add (variantId, quantity)
+    Controller->>Service: add(loginUser, variantId, quantity)
+    Service->>VRepo: findById(variantId)
+    VRepo->>DB: SELECT * FROM product_variants WHERE id = ?
+    DB-->>VRepo: ProductVariant
+    VRepo-->>Service: Optional~ProductVariant~
+    Service->>Service: 在庫チェック（stock >= quantity）
+    alt 在庫あり
+        Service->>CRepo: findByUserAndVariant(user, variant)
+        DB-->>CRepo: Optional~CartItem~
+        alt カートに既存
+            Service->>CRepo: save（数量加算）
+        else カートに未存在
+            Service->>CRepo: save（新規追加）
+        end
+        CRepo->>DB: INSERT or UPDATE cart_items
+        Controller-->>User: redirect:/cart
+    else 在庫なし
+        Service-->>Controller: OutOfStockException
+        Controller-->>User: エラーメッセージ表示
+    end
+```
+
+#### 注文確定
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Controller as OrderController
+    participant OService as OrderService
+    participant CService as CartService
+    participant Payment as PaymentStrategy
+    participant ORepo as OrderRepository
+    participant DB as Oracle DB
+
+    User->>Controller: POST /orders (OrderForm)
+    Controller->>OService: order(loginUser, orderForm)
+    OService->>CService: findByUser(user)
+    CService->>DB: SELECT * FROM cart_items WHERE user_id = ?
+    DB-->>CService: List~CartItem~
+    CService-->>OService: List~CartItem~
+
+    loop 全カートアイテム
+        OService->>DB: 在庫チェック・在庫更新
+    end
+
+    OService->>Payment: pay(totalPrice)
+    Payment-->>OService: 決済完了（仮）
+
+    OService->>ORepo: save(order)
+    ORepo->>DB: INSERT INTO orders ...
+    ORepo->>DB: INSERT INTO order_items ...
+    DB-->>ORepo: 完了
+
+    OService->>CService: clear(user)
+    CService->>DB: DELETE FROM cart_items WHERE user_id = ?
+
+    OService-->>Controller: Order
+    Controller-->>User: redirect:/orders/complete
+```
+
+#### 会員登録
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Controller as UserController
+    participant Service as UserService
+    participant Repository as UserRepository
+    participant DB as Oracle DB
+
+    User->>Controller: POST /register (UserForm)
+    Controller->>Controller: バリデーション（@Valid）
+    alt バリデーションエラー
+        Controller-->>User: register.html（エラー表示）
+    else バリデーションOK
+        Controller->>Service: register(userForm)
+        Service->>Repository: findByEmail(email)
+        Repository->>DB: SELECT * FROM users WHERE email = ?
+        DB-->>Repository: Optional~User~
+        alt メールアドレス重複
+            Service-->>Controller: EmailDuplicateException
+            Controller-->>User: register.html（エラー表示）
+        else 重複なし
+            Service->>Service: BCryptでパスワードハッシュ化
+            Service->>Repository: save(user)
+            Repository->>DB: INSERT INTO users ...
+            DB-->>Repository: 完了
+            Controller-->>User: redirect:/login
+        end
+    end
+```
+
+---
+
+### 画面遷移図
+
+```mermaid
+stateDiagram-v2
+    [*] --> トップページ
+
+    トップページ --> 商品一覧
+    トップページ --> ログイン
+    トップページ --> 会員登録
+
+    商品一覧 --> 商品一覧 : 絞り込み・検索
+    商品一覧 --> 商品詳細
+
+    商品詳細 --> カート : カートに追加（要ログイン）
+    商品詳細 --> ログイン : 未ログイン時
+
+    ログイン --> トップページ : ログイン成功
+    ログイン --> パスワードリセット申請
+    ログイン --> 会員登録
+
+    会員登録 --> ログイン : 登録完了
+
+    パスワードリセット申請 --> パスワードリセット申請完了 : メール送信
+    パスワードリセット申請完了 --> 新パスワード入力 : メールのリンクから
+    新パスワード入力 --> ログイン : 更新完了
+
+    カート --> 商品一覧 : 買い物を続ける
+    カート --> お届け先入力 : 初回注文
+    カート --> 注文確定 : 住所登録済み
+
+    お届け先入力 --> 注文確定 : 住所保存
+
+    注文確定 --> 注文完了 : 注文確定ボタン
+    注文確定 --> カート : カートに戻る
+
+    注文完了 --> トップページ
+
+    state 管理者画面 {
+        [*] --> 商品管理一覧
+        商品管理一覧 --> 商品登録
+        商品管理一覧 --> 商品編集
+        商品管理一覧 --> 商品削除確認
+        商品削除確認 --> 商品管理一覧 : 削除完了
+        商品登録 --> 商品管理一覧 : 登録完了
+        商品編集 --> 商品管理一覧 : 更新完了
+        [*] --> 注文管理一覧
+        注文管理一覧 --> 注文詳細
+        注文詳細 --> 注文管理一覧 : ステータス更新
+    }
 ```
 
 ---
