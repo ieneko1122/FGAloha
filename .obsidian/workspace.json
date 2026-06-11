@@ -185,6 +185,8 @@
   },
   "active": "b130c4cb62703767",
   "lastOpenFiles": [
+    "FGAloha_学習ノート (1).md",
+    "FGAloha_設計書 (1).md",
     "target/classes/com/fgaloha/repository/OrderRepository.class",
     "src/main/java/com/fgaloha/repository/OrderRepository.java",
     "target/classes/com/fgaloha/repository/CartItemRepository.class",
@@ -197,7 +199,6 @@
     "src/main/java/com/fgaloha/repository/UserRepository.java",
     "FGAloha_設計書.md",
     "HELP.md",
-    "FGAloha_設計書 (1).md",
     "FGAloha_学習ノート.md"
   ]
 }

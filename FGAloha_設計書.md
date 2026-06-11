@@ -577,14 +577,14 @@ erDiagram
 
 **管理者向け**
 
-| 画面名          | URL                             | フェーズ |
-| ------------ | ------------------------------- | ---- |
-| 商品一覧         | GET /admin/products             | 1    |
-| 商品登録         | GET /admin/products/new         | 1    |
-| 商品編集         | GET /admin/products/{id}/edit   | 1    |
-| 商品削除確認       | GET /admin/products/{id}/delete | 1    |
-| 注文一覧         | GET /admin/orders               | 1    |
-| 注文詳細・ステータス更新 | GET /admin/orders/{id}          | 1    |
+| 画面名 | URL | フェーズ |
+|--------|-----|---------|
+| 商品一覧 | GET /admin/products | 1 |
+| 商品登録 | GET /admin/products/new | 1 |
+| 商品編集 | GET /admin/products/{id}/edit | 1 |
+| 商品削除確認 | GET /admin/products/{id}/delete | 1 |
+| 注文一覧 | GET /admin/orders | 1 |
+| 注文詳細・ステータス更新 | GET /admin/orders/{id} | 1 |
 
 ### クラス図
 
@@ -1228,12 +1228,24 @@ Entity → Repository → Service（TDD）→ Controller → View
 
 #### STEP 3：Repository層
 ```
-⬜ 未着手
-├── JpaRepositoryを継承するだけでCRUD完成
-├── カスタムメソッドは@Queryで追加
-└── 戻り値はOptional<T>を使う
+✅ 完了済み
+├── ✅ ColorRepository
+├── ✅ SizeRepository
+├── ✅ ShippingMethodRepository
+├── ✅ PaymentMethodRepository
+├── ✅ CategoryRepository
+├── ✅ UserRepository（findByEmail）
+├── ✅ ProductRepository（findByNameContaining・findByCategoriesId）
+├── ✅ ProductVariantRepository
+├── ✅ CartItemRepository（findByUser・deleteByUser）
+└── ✅ OrderRepository（findByUserOrderByOrderedAtDesc）
 
-複雑な@Queryを書いたらDataJpaTestでテスト
+各Repositoryで確認すること：
+├── JpaRepository<Entity, Long> を継承（インターフェース同士はextends）
+├── 継承時にジェネリクスで型を確定させる
+├── メソッド名規則でSQLが自動生成される
+├── 戻り値はOptional<T>を使う
+└── CascadeType.ALL（Order → OrderItem のみ）
 ```
 
 #### STEP 4：Service層（TDD）
@@ -1327,9 +1339,14 @@ Red（テスト作成）→ Green（実装）→ Refactor の繰り返し
 - [ ] `toString` にリレーションを含めてはいけない理由を2つ説明できる
 
 **STEP 3チャレンジ**
-- [ ] `JpaRepository` が提供するメソッドを5つ以上挙げられる
-- [ ] `Optional<T>` を使った Repository メソッドを書ける
-- [ ] `@Query` でJPQLを書ける
+- [ ] `JpaRepository` が継承だけで使えるメソッドを5つ以上挙げられる
+- [ ] インターフェース同士の継承に `extends` を使う理由を説明できる
+- [ ] 継承時にジェネリクスで型を確定させる意味を説明できる
+- [ ] メソッド名規則（findBy・OrderBy・Containing・Desc等）を使える
+- [ ] `Optional<T>` を戻り値に使ったRepositoryメソッドを書ける
+- [ ] `CascadeType.ALL` が必要なケースとそうでないケースを説明できる
+- [ ] ライフサイクルの観点でcascadeの要否を判断できる
+- [ ] `@Query` でJPQLを書ける（STEP4で実践）
 
 **STEP 4チャレンジ**
 - [ ] Red → Green → Refactor のサイクルでTDDを実践できる
@@ -1358,8 +1375,16 @@ Red（テスト作成）→ Green（実装）→ Refactor の繰り返し
 
 ❌ @PrePersist で管理するフィールドに setter を作ってしまう
 → 外から誤って上書きされるリスクがある
+
+❌ CascadeType.ALL を安易に全@OneToManyに付ける
+→ 意図しない削除・更新が発生するリスクがある
+→ ライフサイクルが独立しているEntityには付けない
+
+❌ Repository のメソッド引数の型を間違える
+→ findByUser(User user) の引数は User（List<CartItem>ではない）
+→ JPAがオブジェクトからIDを自動抽出してくれる
 ```
 
 ---
 
-*最終更新：STEP2（Entity層）完了時点*
+*最終更新：STEP3（Repository層）完了時点*

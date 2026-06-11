@@ -14,8 +14,9 @@
 6. [Java Gold要素](#6-java-gold要素)
 7. [Spring Security](#7-spring-security)
 8. [AOP（アスペクト指向プログラミング）](#8-aopアスペクト指向プログラミング)
-9. [Gitの基礎](#9-gitの基礎)
-10. [次のタスク](#10-次のタスク)
+9. [Repository層](#9-repository層)
+10. [Gitの基礎](#10-gitの基礎)
+11. [次のタスク](#11-次のタスク)
 
 ---
 
@@ -513,7 +514,143 @@ public class GlobalExceptionHandler {
 
 ---
 
-## 9. Gitの基礎
+## 9. Repository層
+
+### JpaRepositoryの仕組み
+
+```java
+// 継承するだけでCRUDメソッドが使える
+public interface ProductRepository extends JpaRepository<Product, Long> {
+}
+```
+
+`JpaRepository<T, ID>` の型引数：
+- `T`：対象のEntityクラス
+- `ID`：PKの型（Long等）
+
+継承時に型を確定させることでメソッドの戻り値が型安全になる：
+```java
+// Product に確定されるので型安全
+Optional<Product> findById(Long id);
+List<Product>     findAll();
+Product           save(Product entity);
+```
+
+### JpaRepositoryが提供する主なメソッド
+
+```java
+save(entity)          // INSERT or UPDATE
+findById(id)          // SELECT WHERE id = ? → Optional<T>
+findAll()             // SELECT * FROM ...
+deleteById(id)        // DELETE WHERE id = ?
+count()               // SELECT COUNT(*)
+existsById(id)        // 存在確認 → boolean
+```
+
+### メソッド名規則（自動SQL生成）
+
+```java
+// findBy + フィールド名 で検索
+findByEmail(String email)
+// → SELECT * FROM users WHERE email = ?
+
+// Containing でLIKE検索
+findByNameContaining(String keyword)
+// → SELECT * FROM products WHERE name LIKE '%?%'
+
+// ネストしたフィールドの検索（アンダースコアで区切る）
+findByCategoriesId(Long categoryId)
+// → JOIN categories WHERE category_id = ?
+
+// OrderBy + フィールド名 + Desc で並び順指定
+findByUserOrderByOrderedAtDesc(User user)
+// → SELECT * FROM orders WHERE user_id = ? ORDER BY ordered_at DESC
+```
+
+### インターフェース同士の継承
+
+```java
+// クラスの継承 → extends
+public class Dog extends Animal { }
+
+// インターフェースの実装 → implements
+public class Dog implements Runnable { }
+
+// インターフェース同士の継承 → extends
+public interface ProductRepository extends JpaRepository<Product, Long> { }
+```
+
+### CascadeType
+
+親Entityへの操作を子Entityに自動伝播させる仕組み。
+
+```java
+// Order → OrderItem はライフサイクルが同じ → CASCADE付ける
+@OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
+private List<OrderItem> orderItems = new ArrayList<>();
+
+// Product → ProductVariant はライフサイクルが独立 → CASCADE付けない
+// （Variantが cart_items・order_items から参照されているため）
+@OneToMany(mappedBy = "product")
+private List<ProductVariant> variants = new ArrayList<>();
+```
+
+| CascadeType | 意味 |
+|---|---|
+| `PERSIST` | save時に子も一緒にINSERT |
+| `MERGE` | update時に子も一緒にUPDATE |
+| `REMOVE` | delete時に子も一緒にDELETE |
+| `ALL` | 上記全部 |
+
+### Cascadeの判断基準
+
+```
+✅ 付ける
+├── 親なしに子が存在できない（Order → OrderItem）
+├── 親と完全に同じライフサイクル
+└── 子が他テーブルから参照されていない
+
+❌ 付けない
+├── 子が他テーブルから参照されている（Product → ProductVariant）
+├── 親が消えても子を残したい場合がある
+└── 削除が複雑な業務ロジックを伴う（User → CartItem）
+```
+
+### ライフサイクルとスナップショット
+
+```
+ライフサイクル = 「そのEntityがいつ生まれていつ消えるか」
+
+Order と OrderItem → ライフサイクルが同じ
+  Orderが消えたら OrderItem も不要 → CASCADE ✅
+
+Product と ProductVariant → ライフサイクルが独立
+  Productが消えても Variant は cart_items・order_items から参照されている
+  → 勝手に消すと外部キー違反 😱 → CASCADE ❌
+
+スナップショット = ライフサイクルが異なるEntityへの依存を断ち切る仕組み
+  OrderItem が productName・unitPrice を String/int で持つ理由：
+  → 将来 ProductVariant が削除・変更されても注文時点の情報が永久に残る
+```
+
+### コミットメッセージの慣習（Conventional Commits）
+
+```
+feat:     新機能追加
+fix:      バグ修正
+docs:     ドキュメント変更
+refactor: リファクタリング
+test:     テスト追加・修正
+chore:    ビルド・設定変更
+
+例：
+git commit -m "feat: STEP3 Repository層の実装完了"
+git commit -m "docs: 設計書・学習ノートを教材向けに更新"
+```
+
+---
+
+## 10. Gitの基礎
 
 ### 全体像
 
@@ -565,16 +702,19 @@ git push
 
 ---
 
-## 10. 次のタスク
+## 11. 次のタスク
 
 ```
-⬜ 設計書の進捗更新（STEP1・STEP2を完了済みに）
-⬜ STEP3：Repository層の実装
-   ├── JpaRepository を継承するだけでCRUD完成
-   ├── カスタムメソッドは @Query で追加
-   └── 戻り値は Optional<T> を使う
+✅ 設計書・学習ノートの更新（STEP1・2・3を完了済みに）
+✅ STEP3：Repository層の実装完了
+⬜ STEP4：Service層（TDD）
+   ├── ProductService → CartService → OrderService → UserService の順
+   ├── Red（テスト作成）→ Green（実装）→ Refactor のサイクル
+   ├── Optional.orElseThrow() でカスタム例外を投げる
+   ├── Stream・Collectors をフル活用
+   └── Strategy パターン（支払い処理）
 ```
 
 ---
 
-*最終更新：STEP2（Entity層）完了時点*
+*最終更新：STEP3（Repository層）完了時点*
