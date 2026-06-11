@@ -1,12 +1,11 @@
 package com.fgaloha.repository;
 
-
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import com.fgaloha.entity.PaymentMethod;
+import com.fgaloha.entity.ProductVariant;
 
 @Repository
-public interface PaymentMethodRepository extends JpaRepository<PaymentMethod, Long> {
+public interface ProductVariantRepository extends JpaRepository<ProductVariant, Long> {
 
 }
